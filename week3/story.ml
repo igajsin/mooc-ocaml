@@ -14,7 +14,9 @@ and location = Appartment | Restaurant
 let compatible_actions_for_character character context =
   match character with
   | { location = Restaurant } -> [Eat]
-  | { location = Appartment } -> [GoToRestaurant]
+  | { location = Appartment; state = Hungry } -> [GoToRestaurant]
+  | { location = Appartment; state = Happy } -> [GoToRestaurant]
+  | { location = Appartment; state = Tired } -> [Sleep]
 ;;
 
 let apply_action character = function
@@ -24,6 +26,9 @@ let apply_action character = function
   | GoToRestaurant ->
       { location = Restaurant;
         state = character.state; name = character.name }
+  | Sleep ->
+      { state = Hungry;
+        location = character.location; name = character.name }
 ;;
 
 let compatible_actions context =
@@ -44,6 +49,7 @@ let possible_changes_for_character character =
   match character with
   | { state = Happy } -> [Hungry]
   | { state = Hungry } -> []
+  | { state = Tired} -> []
 ;;
 let apply_change character state =
   { name = character.name; state = state; location = character.location }
@@ -133,6 +139,7 @@ let describe_location = function
 let describe_state = function
   | Happy -> "happy"
   | Hungry -> "hungry"
+  | Tired -> "tired"
 ;;
 let describe character =
   character.name ^ " was "
@@ -151,6 +158,7 @@ let tell_context context =
 let tell_action = function
   | Eat -> "ate"
   | GoToRestaurant -> "went to the restaurant"
+  | Sleep -> "took a nap"
 ;;
 
 let tell_event = function
