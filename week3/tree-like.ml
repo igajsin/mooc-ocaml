@@ -51,3 +51,33 @@ let lookup trie w =
          | Some x -> depper x (n + 1)
          | _ -> None in
   depper trie 0;;
+
+let exclude lst elt =
+    let p x =
+      let (c, _) = x in
+      c = elt in
+    let rec filter_tree proc lst =
+      match lst with
+      | [] -> []
+      | x::xs -> if proc x then
+                   filter_tree proc xs
+                 else
+                   x::(filter_tree proc xs) in
+    filter_tree p lst;;
+
+let insert trie w v =
+  let stop n = String.length w = n in
+  let rec step t n =
+    match t with
+    | Trie (r, cs) ->
+        if stop n then Trie (Some v, cs)
+        else
+          let cur = String.get w n in
+          let c_branch = children_from_char cs cur and
+              other_branch = exclude cs cur in
+          let h =
+            match c_branch with
+            | None -> (cur, step empty (n + 1))
+            | Some x -> (cur, step x (n + 1)) in
+          Trie (r, h::other_branch) in
+  step trie 0;;
