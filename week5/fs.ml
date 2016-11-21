@@ -32,41 +32,65 @@ let print_filesystem root =
     match items with
     | [] -> ()
     | (name, File)::l ->
-      (print_file lvl name; print_char '\n';
-       print_filesystem1 lvl l)
+        (print_file lvl name; print_char '\n';
+         print_filesystem1 lvl l)
     | (name, Symlink path)::l ->
-      (print_symlink lvl name path; 
-       print_filesystem1 lvl l)
+        (print_symlink lvl name path;
+         print_filesystem1 lvl l)
     | (name, Dir fs)::l ->
-      (print_dir lvl name; 
-       print_filesystem1 (lvl + 1) fs;
-       print_filesystem1 lvl l)
-   in
+        (print_dir lvl name;
+         print_filesystem1 (lvl + 1) fs;
+         print_filesystem1 lvl l)
+  in
   print_filesystem1 0 root ;;
 
-let root_dir = [ "photos", Dir
-    [ "march", Dir
-        [ "photo_1.bmp", File ;
-          "photo_2.bmp", File ;
-          "photo_3.bmp", File ;
-          "index.html", File ] ;
-      "april", Dir
-        [ "photo_1.bmp", File ;
-          "photo_2.bmp", File ;
-          "index.html", File ] ] ;
-  "videos", Dir
-    [ "video1.avi", File ;
-      "video2.avi", File ;
-      "video3.avi", File ;
-      "video4.avi", File ;
-      "best.avi", Symlink [ "video4.avi" ] ;
-      "index.html", File ] ;
-  "indexes", Dir
-    [ "videos.html",
-      Symlink [ ".." ; "videos" ; "index.html" ] ;
-      "photos_march.html",
-      Symlink [ ".." ; "photos" ; "march" ; "index.html" ] ;
-      "photos_april.html",
-      Symlink [ ".." ; "photos" ; "april" ; "index.html" ] ;
-      "photos_may.html",
-      Symlink [ ".." ; "photos" ; "may" ; "index.html" ] ] ];;
+let rec resolve sym path =
+  let rec resolve acc path =
+    match (acc, path) with
+    | (_, []) -> acc
+    | (x::xs, y::ys) ->
+       if y = ".." then resolve xs ys
+       else resolve (y::acc) ys
+    | (_, y::ys) ->
+       if y = ".." then resolve [] ys
+       else resolve (y::acc) ys in
+
+  List.rev (resolve (List.tl (List.rev sym)) path) ;;
+
+let rec file_exists root path =
+  let rec mem p = function
+    | [] -> None
+    | x::xs -> if p x then Some x
+               else
+                 mem p xs in
+  match path with
+  | [] -> true
+  | x::xs ->
+     match mem (fun (name, _ ) ->
+                            x = name) root with
+     | None -> false
+     | Some (_, Dir ds) -> file_exists ds xs
+     | Some (_, File) -> file_exists [] xs
+     | Some (_, Symlink _) -> false;;
+
+let print_filesystem root =
+  let rec print_filesystem1 acc lvl items =
+    match items with
+    | [] -> ()
+    | (name, File)::l ->
+        (print_file lvl name; print_char '\n';
+         print_filesystem1 acc lvl l)
+    | (name, Symlink path)::l ->
+       if file_exists root (resolve (acc@[name]) path) then
+         (print_symlink lvl name path;
+          print_filesystem1 acc lvl l)
+       else
+         (print_file lvl name; print_string " -> "; print_string "INVALID\n";
+          print_filesystem1 acc lvl l)
+    | (name, Dir fs)::l ->
+        (print_dir lvl name;
+         print_filesystem1 (List.rev (name::acc)) (lvl + 1) fs;
+         print_filesystem1 acc lvl l)
+  in
+  print_filesystem1 [] 0 root ;;
+
