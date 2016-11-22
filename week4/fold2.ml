@@ -2,20 +2,24 @@ let for_all p l = List.fold_left (fun acc x -> acc && p x) true l;;
 
 let exists p l = List.fold_left (fun acc x -> acc || p x) false l;;
 
-let rec sorted cmp = function
-  | [] | [_] -> true
-  | h::k::r ->
-    let ssorted = List.fold_left
-        (fun acc x ->
-           match acc with
-           | (_, None) -> (x, None)
-           | (prev, Some o) ->
-             match cmp prev x with
-             | 0 -> (x, Some o)
-             | -1 when o = -1 -> (x, Some o)
-             | -1 when o = 1 -> (x, None)
-             | 1 when o = 1 -> (x, Some o)
-             | 1 when o = -1 -> (x, None)
-        ) (h, Some (cmp h k)) r in
-    let (_, res) = ssorted in
-    res != None;;
+type ordering =
+  | None
+  | Unordered
+  | Option of int;;
+
+let sorted cmp = function
+  | [] -> true
+  | h::tl ->
+    let l (ord, prev) x =
+      let cur_ord = cmp prev x in
+      match ord with
+      | None ->
+        if cur_ord = 0 then
+          (None, x)
+        else
+          (Option cur_ord, x)
+      | Option o when o >= 0 && cur_ord >= 0 -> (Option 1, x)
+      | Option o when o <= 0 && cur_ord <= 0 -> (Option (-1), x)
+      | _ -> (Unordered, x) in
+    let (res, _) = List.fold_left l (None, h) tl in
+    not (res = Unordered);;
