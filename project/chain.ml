@@ -164,18 +164,63 @@ let is_word c =
     || (idx > 64 && idx < 91)
     || (idx > 96 && idx < 123)
     || (idx > 127) in
-  let is_punctuation c =
-    List.mem c [';'; ','; ':'; '-'; '"'; '\''; '?'; '!' ; '.'] in
-  (is_ab idx) || is_punctuation c;;
+  is_ab idx;;
 
-let is_terminator c = List.mem c ['?'; '!'; '.'];;
+let is_punctuation c =
+    List.mem c [';'; ','; ':'; '-'; '"'; '\''; '?'; '!' ; '.'] ;;
+let is_sentence_separator c = List.mem c ['?'; '!'; '.'];;
 
-let find_terms_position txt =
-  let terminators = ref [] in
+let split_word str =
+  let buf = Buffer.create 3 in
+  let res = ref [] in
+  let flash_buf ()=
+    let word = Buffer.contents buf in
+    if not (word = "") then
+      (res := word :: !res;
+       Buffer.clear buf) in
+  let convert idx c =
+    if is_word c then (*part of uninterrupted sequences*)
+      Buffer.add_char buf c
+    else if is_punctuation c then
+      (flash_buf ();
+       res := (String.make 1 c) :: !res)
+    else (* is separator *)
+      flash_buf () in
   begin
-    String.iteri (fun idx c ->
-        if is_terminator c then
-          terminators := idx :: !terminators
-      ) txt;
-    List.rev !terminators
+    String.iteri convert str;
+    flash_buf ();
+    List.rev !res
   end;;
+
+let split_sentence words =
+  let is_sentence_separator s =
+    s = "!" || s = "?" || s = "." in
+  let add2end lst = function
+	   | [] -> lst
+	   | x -> lst @ [x] in
+  let (sentence, sentences) =
+    List.fold_left
+      (fun (sentence, sentences) word ->
+        if is_sentence_separator word then
+          ([], add2end sentences (sentence @ [word]))
+      else
+        (sentence @ [word], sentences)
+      ) ([],[]) words in
+  add2end sentences sentence;;
+
+let sentences str =
+  split_sentence (split_word str);;
+
+type ptable =
+  { prefix_length : int ;
+    table : (string list, distribution) Hashtbl.t };;
+
+let rec start = function
+  | 0 -> []
+  | n -> "START" :: start (n - 1);;
+
+let shift words word =
+  let base = match words with
+    | [] -> []
+    | x::xs -> xs in
+  base @ [word];;
