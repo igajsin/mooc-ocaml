@@ -164,18 +164,132 @@ let is_word c =
     || (idx > 64 && idx < 91)
     || (idx > 96 && idx < 123)
     || (idx > 127) in
-  let is_punctuation c =
-    List.mem c [';'; ','; ':'; '-'; '"'; '\''; '?'; '!' ; '.'] in
-  (is_ab idx) || is_punctuation c;;
+  is_ab idx;;
 
-let is_terminator c = List.mem c ['?'; '!'; '.'];;
+let is_punctuation c =
+    List.mem c [';'; ','; ':'; '-'; '"'; '\''; '?'; '!' ; '.'] ;;
+let is_sentence_separator c = List.mem c ['?'; '!'; '.'];;
 
-let find_terms_position txt =
-  let terminators = ref [] in
+let split_word str =
+  let buf = Buffer.create 3 in
+  let res = ref [] in
+  let flash_buf ()=
+    let word = Buffer.contents buf in
+    if not (word = "") then
+      (res := word :: !res;
+       Buffer.clear buf) in
+  let convert idx c =
+    if is_word c then (*part of uninterrupted sequences*)
+      Buffer.add_char buf c
+    else if is_punctuation c then
+      (flash_buf ();
+       res := (String.make 1 c) :: !res)
+    else (* is separator *)
+      flash_buf () in
   begin
-    String.iteri (fun idx c ->
-        if is_terminator c then
-          terminators := idx :: !terminators
-      ) txt;
-    List.rev !terminators
+    String.iteri convert str;
+    flash_buf ();
+    List.rev !res
+  end;;
+
+let split_sentence words =
+  let is_sentence_separator s =
+    s = "!" || s = "?" || s = "." in
+  let add2end lst = function
+	   | [] -> lst
+	   | x -> lst @ [x] in
+  let (sentence, sentences) =
+    List.fold_left
+      (fun (sentence, sentences) word ->
+        if is_sentence_separator word then
+          ([], add2end sentences (sentence @ [word]))
+      else
+        (sentence @ [word], sentences)
+      ) ([],[]) words in
+  add2end sentences sentence;;
+
+let sentences str =
+  split_sentence (split_word str);;
+
+type ptable =
+  { prefix_length : int ;
+    table : (string list, distribution) Hashtbl.t };;
+
+let rec start = function
+  | 0 -> []
+  | n -> "START" :: start (n - 1);;
+
+let shift words word =
+  let base = match words with
+    | [] -> []
+    | x::xs -> xs in
+  base @ [word];;
+
+let add_to table k v =
+  if Hashtbl.mem table k then
+    let vs = Hashtbl.find table k in
+    Hashtbl.replace table k (v::vs)
+  else
+    Hashtbl.add table k [v] ;;
+
+let build_ptable words n =
+  let table = Hashtbl.create 0 in
+  let result = Hashtbl.create 0 in
+  let last =
+    List.fold_left
+      (fun key x ->
+        (add_to table key x;
+        shift key x)) (start n) words in
+  (add_to table last "STOP";
+   Hashtbl.iter (fun k v -> Hashtbl.add result k (compute_distribution v)) table;
+   {prefix_length = n; table = result});;
+
+let walk_ptable ptable =
+  let first = start ptable.prefix_length in
+  let table = ptable.table in
+  let rec step prevs =
+    let word = next_in_htable table prevs in
+    if word = "STOP" then []
+    else
+      word :: (step (shift prevs word)) in
+  step first;;
+
+
+
+
+exception Inconsistent_prefix of int * int;;
+
+let merge_ptables ptables =
+  let common_prefix prefixes =
+    List.fold_left
+      (fun prev_prefix x ->
+        if prev_prefix = x then x
+        else
+          raise (Inconsistent_prefix (prev_prefix, x)))
+      (List.hd prefixes)
+      (List.tl prefixes) in
+  let add table k dist =
+    let add_distributions d1 d2 =
+      let total = d1.total + d2.total in
+      let rec put (k, v) = function
+        | [] -> [(k, v)]
+        | (k1, v1)::xs when k = k1 -> (k, v + v1) :: xs
+        | (k1, v1)::xs -> (k1, v1)::(put (k, v) xs) in
+      let amounts =
+        List.fold_left (fun acc x -> put x acc) d1.amounts d2.amounts in
+      {total = total; amounts = amounts} in
+    if Hashtbl.mem table k then
+      let d1 = Hashtbl.find table k in
+      Hashtbl.replace table k (add_distributions d1 dist)
+    else
+      Hashtbl.add table k dist in
+  let tables = List.map (fun x -> x.table) ptables in
+  let prefixes = List.map (fun x -> x.prefix_length) ptables in
+  let prefix = common_prefix prefixes in
+  let result = List.hd tables in
+  begin
+    List.iter
+      (fun tbl -> Hashtbl.iter (fun k v -> add result k v) tbl)
+      (List.tl tables);
+    {prefix_length = prefix; table = result}
   end;;
