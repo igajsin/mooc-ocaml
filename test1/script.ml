@@ -9,8 +9,6 @@ let fac_arg =
   let doc = "Please give a positive number for factorial's calculation." in
   Arg.(value & opt int 1 & info ["f"; "factorial"] ~docv:"factorial" ~doc);;
 
-let 
-
 let main n =
   let fq = fac n in
   Printf.printf "factorial of %n is %n\n" n fq;;
